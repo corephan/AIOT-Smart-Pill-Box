@@ -28,11 +28,11 @@ def send_email(to_email: str, subject: str, body: str) -> bool:
         return False
 
 def send_email_verification(email: str, link: str) -> bool:
-    subject = "Verify your email"
-    body = f"Click this link to verify your email: {link}"
+    subject = "Action required: Verify your email"
+    body = f"Hi User,\nWe received a request to verify your email address.\nTo proceed, please click the links below:\n{link}\nIf you did not request this, please ignore this message. Your account will remain secure.\nBest regards,\nDuck"
     return send_email(email, subject, body)
 
 def send_reset_password(email: str, link: str) -> bool:
-    subject = "Reset your password"
-    body = f"Click this link to reset your password: {link}"
+    subject = "Action required: Reset your password"
+    body = f"Hi User,\nWe received a request to verify your email address.\nTo proceed, please click the links below:\n{link}\nIf you did not request this, please ignore this message. Your account will remain secure.\nBest regards,\nDuck"
     return send_email(email, subject, body)
