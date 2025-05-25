@@ -1,3 +1,11 @@
+# Setup cơ bản:
+
+SMTP_SERVER = smtp.gmail.com
+SMTP_PORT = 587
+SENDER_EMAIL =
+SENDER_PASSWORD =
+Vui lòng ghi các dòng như trên vào .env file
+
 ## Các API Endpoints
 
 ### Đăng ký (Register)
