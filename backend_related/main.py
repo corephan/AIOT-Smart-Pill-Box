@@ -214,22 +214,30 @@ def medical_management():
 
     if not uid or not email:
         return error_response("UNAUTHORIZED", "User not logged in", 401)
+    
     medical_name = data.get("medical_name")
     medical_amount = data.get("medical_amount")
     medical_time = data.get("medical_time")
     medical_duration_days = data.get("medical_duration_days")
-    if not medical_name or not medical_amount or not medical_time or not medical_duration_days:
+
+    if not all([medical_name, medical_amount, medical_time, medical_duration_days]):
         return error_response("INVALID_INPUT", "All fields are required", 400)
-    ref = db.reference("users")
-    updated_information = {
-        "medical_name": medical_name,
-        "medical_amount": medical_amount,
-        "medical_time": medical_time,
-        "medical_duration_days": medical_duration_days
-    }
-    ref.child(uid).update(updated_information)
-    service = authenticate_google_calendar()
-    create_recurring_daily_event(service, email, medical_time, medical_duration_days)
+    try:
+        ref = db.reference("users")
+        updated_information = {
+            "medical_name": medical_name,
+            "medical_amount": medical_amount,
+            "medical_time": medical_time,
+            "medical_duration_days": medical_duration_days
+        }
+        ref.child(uid).update(updated_information)
+    except Exception as e:
+        return error_response("SERVER_ERROR", "Failed to update medical information", 500)
+    try:
+        service = authenticate_google_calendar()
+        create_recurring_daily_event(service, email, medical_time, medical_duration_days)
+    except Exception as e:
+        return error_response("CALENDAR_ERROR", "Failed to create calendar event", 500)
     return jsonify({"message": "Medical information updated successfully"}), 200
 
 if __name__ == "__main__":
