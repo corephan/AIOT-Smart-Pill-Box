@@ -153,10 +153,10 @@
 
 - **Content-Type**: `application/json`
 - **Body**:
+
   ```json
   {
-    "uid": "string",                // UID người dùng (ưu tiên lấy từ session, nếu không có lấy từ body)
-    "email": "string",              // Email người dùng (ưu tiên lấy từ session, nếu không có lấy từ body)
+
     "medical_name": "string",       // Tên thuốc hoặc liệu trình y tế (bắt buộc)
     "medical_amount": "string",     // Liều lượng thuốc (bắt buộc)
     "medical_time": "string",       // Thời gian dùng thuốc trong ngày, định dạng giờ (ví dụ "08:00") (bắt buộc)
