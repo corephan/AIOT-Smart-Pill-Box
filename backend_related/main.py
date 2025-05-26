@@ -16,6 +16,17 @@ from firebase_admin import auth, credentials, db, firestore, initialize_app
 # PROJECT MODULES
 from authentication import check_password, is_valid_email
 from mail_services import send_email_verification, send_reset_password
+from API import authenticate_google_calendar, algorithm as create_recurring_daily_event
+
+# GOOGLE CALENDAR LIBRARIES:
+import datetime 
+import os.path 
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
 # DECLARATION SOME NESSCARY THINGS:
 app = Flask(__name__)
@@ -25,9 +36,10 @@ app.permanent_session_lifetime = timedelta(days=365)
 
 # DECALARATION FOR DATABASE-RELATED:
 cred = credentials.Certificate('key.json')
-initialize_app(cred)
+initialize_app(cred, {
+    "databaseURL": "https://aiot-medical-box-default-rtdb.asia-southeast1.firebasedatabase.app/"
+})
 FIREBASE_AUTH_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyAAftkUDGwBx0oyV3mWRp9VYrhxdk6gdeI"
-db = firestore.client()
 
 # SOME USEFUL FUNCTIONS FOR SOME FUNCTIONALITIES:
 def id_token_c(id_token):
@@ -76,9 +88,19 @@ def register():
         # If fail -> Still allow to register
         pass 
     # Save something to session:
-
+    session["uid"] = user.uid
+    session["email"] = email
     # Save something to the database:
-
+    ref = db.reference("users")
+    user_data = {
+        user.uid: {
+            "medical_name": "",
+            "medical_amount": "",
+            "medical_time": "",
+            "medical_duration_days": "",
+        }
+    }
+    ref.update(user_data)
     return jsonify({
         "message": "User created successfully",
         "uid": user.uid,
@@ -119,7 +141,8 @@ def login():
             id_token = response["idToken"]
             uid = response["localId"]
             # SAVE INFORMATION TO SESSION HERE:
-
+            session["uid"] = uid
+            session["email"] = email
             # SAVE SOMETHING TO DATABASE HERE:
             return jsonify({
                 "message": "Login successful",
@@ -180,6 +203,42 @@ def firebase_login():
         return jsonify({'message': f'Logged in as UID {uid}', 'phone': phone_number}), 200
     except Exception as e:
         return jsonify({'error': 'Token verification failed', 'details': str(e)}), 403
+
+# THE BLOCK OF CODE FOR MEDICAL MANAGEMENT SYSTEM:
+@app.route("/medical_management", methods=["POST"])
+def medical_management():
+    data = request.get_json()
+    uid = session.get("uid") or data.get("uid")
+    email = session.get("email") or data.get("email")
+
+
+    if not uid or not email:
+        return error_response("UNAUTHORIZED", "User not logged in", 401)
+    
+    medical_name = data.get("medical_name")
+    medical_amount = data.get("medical_amount")
+    medical_time = data.get("medical_time")
+    medical_duration_days = data.get("medical_duration_days")
+
+    if not all([medical_name, medical_amount, medical_time, medical_duration_days]):
+        return error_response("INVALID_INPUT", "All fields are required", 400)
+    try:
+        ref = db.reference("users")
+        updated_information = {
+            "medical_name": medical_name,
+            "medical_amount": medical_amount,
+            "medical_time": medical_time,
+            "medical_duration_days": medical_duration_days
+        }
+        ref.child(uid).update(updated_information)
+    except Exception as e:
+        return error_response("SERVER_ERROR", "Failed to update medical information", 500)
+    try:
+        service = authenticate_google_calendar()
+        create_recurring_daily_event(service, email, medical_time, medical_duration_days)
+    except Exception as e:
+        return error_response("CALENDAR_ERROR", "Failed to create calendar event", 500)
+    return jsonify({"message": "Medical information updated successfully"}), 200
 
 if __name__ == "__main__":
     app.run(debug=True)

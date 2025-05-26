@@ -1,11 +1,3 @@
-# Setup cơ bản:
-
-SMTP_SERVER = smtp.gmail.com
-SMTP_PORT = 587
-SENDER_EMAIL =
-SENDER_PASSWORD =
-Vui lòng ghi các dòng như trên vào .env file
-
 ## Các API Endpoints
 
 ### Đăng ký (Register)
@@ -149,3 +141,56 @@ Vui lòng ghi các dòng như trên vào .env file
   ```
   - `Missing or invalid token`: Header Authorization không hợp lệ.
   - `Token verification failed`: Token không hợp lệ hoặc hết hạn.
+
+### Quản lý thông tin y tế (Medical Management)
+
+- **URL**: `/medical_management`
+- **Method**: `POST`
+- **Chức năng**:  
+  Nhận thông tin y tế của người dùng, cập nhật vào cơ sở dữ liệu Firebase và tạo sự kiện nhắc nhở hàng ngày trên Google Calendar dựa trên thời gian và số ngày dùng thuốc.
+
+#### Request (Input)
+
+- **Content-Type**: `application/json`
+- **Body**:
+  ```json
+  {
+    "uid": "string",                // UID người dùng (ưu tiên lấy từ session, nếu không có lấy từ body)
+    "email": "string",              // Email người dùng (ưu tiên lấy từ session, nếu không có lấy từ body)
+    "medical_name": "string",       // Tên thuốc hoặc liệu trình y tế (bắt buộc)
+    "medical_amount": "string",     // Liều lượng thuốc (bắt buộc)
+    "medical_time": "string",       // Thời gian dùng thuốc trong ngày, định dạng giờ (ví dụ "08:00") (bắt buộc)
+    "medical_duration_days": number // Số ngày dùng thuốc (bắt buộc)
+  }
+  ```
+
+#### Response (Output)
+
+- **Status Code**: `200 OK`
+- **Body (Thành công)**:
+  ```json
+  {
+    "message": "Medical information updated successfully"
+  }
+  ```
+- **Status Code**: `400 Bad Request`, `401 Unauthorized`, `500 Internal Server Error`
+- **Body (Lỗi)**:
+
+  - `UNAUTHORIZED`: Người dùng chưa đăng nhập hoặc thiếu thông tin xác thực.
+  - `INVALID_INPUT`: Thiếu một trong các trường bắt buộc (`medical_name`, `medical_amount`, `medical_time`, `medical_duration_days`).
+  - `SERVER_ERROR`: Lỗi khi cập nhật thông tin y tế vào cơ sở dữ liệu.
+  - `CALENDAR_ERROR`: Lỗi khi tạo sự kiện trên Google Calendar.
+
+  Ví dụ:
+
+  ```json
+  {
+    "code": "INVALID_INPUT",
+    "message": "All fields are required"
+  }
+  ```
+
+#### Ghi chú
+
+- Ưu tiên lấy `uid` và `email` từ session nếu có, nếu không sẽ lấy từ body request.
+- Nếu cập nhật thông tin thành công, hệ thống sẽ tự động tạo sự kiện nhắc nhở trên Google Calendar cho người dùng.
