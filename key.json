@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "aiot-medical-box",
+  "private_key_id": "ed8aa1fab17499d91f9a00c88cd5d4231a4b3c3a",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEugIBADANBgkqhkiG9w0BAQEFAASCBKQwggSgAgEAAoIBAQCr3RFuXK8ksYg6\npJ+E9znh7y5WstMbB0pTMwcwXajdRI+z+EV9bqTUVIdZHqaZxA+Ty55cpkpBJXa1\n+kOVi6kEmuuSMUNtmwHg2OYuU8XUU82yXGbNLsKJaPexkB/qtaneOK8phXLSo4WX\njNWm64nWXhrfQU1mg8IOcyQmq5pt/8zjHVEkUdLApgSop/EV4S8I+wt9IMFPnyS9\nzPGi1u2cb2SsFtF5UEilfmizklkFBlGWq7whA1lbMYKTsRY50HfVxaZKParmMqAY\nzmedq1qM3UcdLntIk3iPXf+FOJ/nsuvCFmRBqB35LRwkYozdyK81TAlsRbzazNoD\n+ubYhjkRAgMBAAECgf9U+rqObMXYHvB9ZBPRwMJI3+YfIyJp+vDasstF3wngXvEE\nzCjlchA5QpKqPmhNH+TpRNrJH8XCRgQCIf0eX4WeAVGkt+HfZbCdZ/e+cIMhZKQR\nIsoHgAIxGktflnmG/3c+/52c/59cXVQb25zJLINmEUy4QlHt9A3AQgQIxaar50Cp\nmewwDCfE1pUu4aRMlfOz78Q3ejJaSASoPAIhFkpw93u1MKnx6e4xL9OqNNhTPtuP\nXqZDY8iwhDhIrm/S+B812pSlZUIv7r5TjTN0d5Ny43Vv1XmDQ5mWgZCas7si/8YL\nY97QaZv4Sx88PFjvF+xPzWRMEIvmFL1gnFxGx5ECgYEA1uOWM+MSvf3nDfFEF9qB\n/SHheRr4WRHf/QqT2Hrt7QUWSABrhVMgOi/zCvFcMSL+vlAferaAwgBqZWPnhNZA\n90ufxNl5b0p4txn0CQiB9FundtQUIu/LDMp6mD9FWCa0nLnuEymB+PkwU9T+kC5c\nqoffH/z2x4w3jPrx7KW+K3kCgYEAzL5Dsqn3GS1Fakk+HUpqpx9ySBZ/4cJtAQ/p\nDElBTmVHZnjCTxP/byaaU8czRU/l1hIC++FqDwU66QIleh7SLnA+PBxhVDcQK4wp\nBL3xjXY2K08Vd9XbPLYC8m0D9gE+iD6ZZ8UqLP182XE3U89k5FexQuSGuLWirAC+\nAVYO/FkCgYBx6KpSTug8dj7okR/7VQTa3f7bZ4SGEoedZuIAOwmsPqoU+MQGJI5M\nyeYXwuGP2nEXCPnm3p9aN0YvAMpVDA3cCOZkPrO0XtGmncdSkoPwuDUJNFqIOnx0\nB1D9K2zi0YGkIpsk5TfUdqM7jQhz/V95thR8rGdUV+uKe+uJ+kHYYQKBgGlmgV9W\nlDhHz/ZZYjqd9q22SJTH0GmeN5NWZ3jFtXLwPIOKIy2mc9b6nnQGlmRWL1G20AZv\nErRM0vjk+/oUJ8t0SPWU/p3mAtMIQo2IYvOaKWS+P6UDWOu2H2pBqMpZ9aEZ6Ms8\n+utSS5V87SieGahbZIu1LY2lI+s8LpRtgyVxAoGAPJNkc7fwU1BlzDfHmusIHGNw\n/STnQpm3HUNsuBO9g9mfGE0JHT52xfFX4/5269QIzulHEz0EFE8BTc32LUczDxMr\n9Ucen/9plvN9pDFa4p+70aEWg4pNGmNa57KWZ6eakE/brg/WR0D15uglomyFp1ak\nr5X/ZEkGoLUpeCS6NZo=\n-----END PRIVATE KEY-----\n",
+  "client_email": "firebase-adminsdk-fbsvc@aiot-medical-box.iam.gserviceaccount.com",
+  "client_id": "117227917331576558622",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40aiot-medical-box.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
