@@ -120,7 +120,11 @@
 
 - **Headers**:
   - `Authorization`: `Bearer <Firebase_ID_Token>` (Token được cung cấp bởi Firebase sau khi xác thực OTP hoặc các phương thức khác).
-
+  ```json
+  {
+    "phone number": "..."
+  }
+  ```
 #### Response (Output)
 
 - **Status Code**: `200 OK`
