@@ -12,8 +12,10 @@
 - **Body**:
   ```json
   {
+    "username": "string",
     "email": "string", // Email của người dùng (bắt buộc)
     "password": "string" // Mật khẩu của người dùng (bắt buộc)
+    "phone_number": "integer"
   }
   ```
   - **Lưu ý về `password`**: Mật khẩu phải đáp ứng các yêu cầu bảo mật được định nghĩa trong hàm `check_password` (không được cung cấp trong mã nguồn, giả định tồn tại và có logic kiểm tra độ phức tạp).
