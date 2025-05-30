@@ -4,6 +4,7 @@ import string
 from datetime import timedelta
 import smtplib
 from email.mime.text import MIMEText
+import datetime
 
 # FLASK AND FIREBASE LIBRARY
 import bcrypt
@@ -14,9 +15,9 @@ from flask_session import Session
 from firebase_admin import auth, credentials, db, firestore, initialize_app
 
 # PROJECT MODULES
-from authentication import check_password, is_valid_email
+from authentication import check_password, is_valid_email, is_valid_vietnamese_phone_number, is_valid_username
 from mail_services import send_email_verification, send_reset_password
-from API import authenticate_google_calendar, algorithm as create_recurring_daily_event
+from API import GoogleCalendarAPI
 
 # GOOGLE CALENDAR LIBRARIES:
 import datetime 
@@ -26,8 +27,8 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
-
+SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
+calendar_api = GoogleCalendarAPI()
 # DECLARATION SOME NESSCARY THINGS:
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
@@ -39,7 +40,7 @@ cred = credentials.Certificate('key.json')
 initialize_app(cred, {
     "databaseURL": "https://aiot-medical-box-default-rtdb.asia-southeast1.firebasedatabase.app/"
 })
-FIREBASE_AUTH_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyAAftkUDGwBx0oyV3mWRp9VYrhxdk6gdeI"
+FIREBASE_AUTH_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyAhRZ159X6lSY5ewAXS55Rd7zqR0wjNAEk"
 
 # SOME USEFUL FUNCTIONS FOR SOME FUNCTIONALITIES:
 def id_token_c(id_token):
@@ -62,8 +63,12 @@ def register():
     data = request.get_json() or {}
     email = data["email"]
     password = data["password"]
+    phone_number = data.get("phone_number")
+    username = data.get("username") 
 
     # Check validation of email and password:
+    if not username:
+        return error_response("USERNAME_REQUIRED", "Username is required")
     if not email:
         return error_response("EMAIL_REQUIRED", "Email is required")
     if not is_valid_email(email):
@@ -72,9 +77,13 @@ def register():
         return error_response("PASSWORD_REQUIRED", "Password is required")
     if check_password(password):
         return error_response("PASSWORD_INVALID", "Password does not meet security requirements.")
+    if not phone_number:
+        return error_response("PHONE_NUMBER_REQUIRED", "Phone number is required")
+    if not is_valid_vietnamese_phone_number(phone_number):
+        return error_response("PHONE_NUMBER_INVALID", "Invalid Vietnamese phone number format")
+    if not is_valid_username(username):
+        return error_response("USERNAME_INVALID", "Username must be 10 characters or less and can only contain letters, numbers, and spaces.")
     
-    if not email or not password:
-        return jsonify({"message": "Email or password are required"}), 400
     try:
         user = auth.create_user(email=email, password=password)
     except auth.EmailAlreadyExistsError:
@@ -94,10 +103,11 @@ def register():
     ref = db.reference("users")
     user_data = {
         user.uid: {
-            "medical_name": "",
-            "medical_amount": "",
-            "medical_time": "",
-            "medical_duration_days": "",
+            "user_info":{
+                "email": email,
+                "phone_number": phone_number,
+                "username": data.get("username")
+            }
         }
     }
     ref.update(user_data)
@@ -121,8 +131,9 @@ def login():
         return error_response("EMAIL_INVALID", "Invalid email format")
     if not password:
         return error_response("PASSWORD_REQUIRED", "Password is required")
-    if not is_valid_email(email):
-        return error_response("EMAIL_INVALID", "Invalid email format")
+    password_error =  check_password(password)
+    if check_password(password):
+        return error_response("PASSWORD_INVALID", password_error)
 
     try:
         response = requests.post(FIREBASE_AUTH_URL, json={
@@ -130,13 +141,15 @@ def login():
             "password": password,
             'returnSecureToken': True
         })
-        response.raise_for_status()
+        if response.status_code != 200:
+            return error_response("AUTH_FAILED", "Authentication failed. Please check your credentials.")
         if response.status_code == 200:
             user = auth.get_user_by_email(email) # To get the status whether user is verified or not.
             
             # Block to check the verifitcation.
             if not user.email_verified:
                 return error_response("EMAIL_NOT_VERIFIED", "Email not verified") 
+            
             response = response.json()
             id_token = response["idToken"]
             uid = response["localId"]
@@ -154,9 +167,13 @@ def login():
     except requests.exceptions.HTTPError as err:
         if err.response.status_code == 400:
             error_data = err.response.json()
-            if error_data.get("error", {}).get("message") == "EMAIL_NOT_FOUND":
+            error_message = error_data.get("error", {}).get("message")
+            if error_message == "EMAIL_NOT_FOUND":
                 return error_response("EMAIL_NOT_FOUND", "Email not found")
-        return error_response("AUTH_FAILED", "Invalid email or password")
+            elif error_message == "INVALID_PASSWORD":
+                return error_response("INVALID_PASSWORD", "Invalid password")
+        return error_response("AUTH_FAILED", str(err))
+    
     except Exception as e:
         app.logger.error(f"Error during login: {e}")
         return error_response("INTERNAL_ERROR", "Internal server error. Please try again later.")
@@ -204,41 +221,107 @@ def firebase_login():
     except Exception as e:
         return jsonify({'error': 'Token verification failed', 'details': str(e)}), 403
 
-# THE BLOCK OF CODE FOR MEDICAL MANAGEMENT SYSTEM:
+# THE BLOCK FOR ADDING PILL:
 @app.route("/medical_management", methods=["POST"])
 def medical_management():
     data = request.get_json()
     uid = session.get("uid") or data.get("uid")
     email = session.get("email") or data.get("email")
-
-
+    
     if not uid or not email:
         return error_response("UNAUTHORIZED", "User not logged in", 401)
     
-    medical_name = data.get("medical_name")
-    medical_amount = data.get("medical_amount")
-    medical_time = data.get("medical_time")
+    medical_time = data.get("medical_time") 
     medical_duration_days = data.get("medical_duration_days")
+    
+    try:
+        local_time = datetime.datetime.strptime(medical_time, "%H:%M").time()
+        utc_plus_7 = datetime.timezone(datetime.timedelta(hours=7))
+        today_local = datetime.datetime.now(utc_plus_7).date()
+        local_datetime = datetime.datetime.combine(today_local, local_time).astimezone(utc_plus_7)
+        utc_time = local_datetime.astimezone(datetime.timezone.utc)  # Convert to UTC
+    except ValueError:
+        return error_response("INVALID_TIME", "Time must be in HH:MM format", 400)
 
-    if not all([medical_name, medical_amount, medical_time, medical_duration_days]):
-        return error_response("INVALID_INPUT", "All fields are required", 400)
     try:
-        ref = db.reference("users")
-        updated_information = {
-            "medical_name": medical_name,
-            "medical_amount": medical_amount,
-            "medical_time": medical_time,
-            "medical_duration_days": medical_duration_days
+        api = GoogleCalendarAPI()
+        service = api.authenticate_google_calendar()
+        event = {
+            'summary': "Take Medication",
+            'start': {
+                'dateTime': utc_time.isoformat(),
+                'timeZone': 'UTC'
+            },
+            'end': {
+                'dateTime': (utc_time + datetime.timedelta(minutes=15)).isoformat(),
+                'timeZone': 'UTC'
+            },
+            'recurrence': [f'RRULE:FREQ=DAILY;COUNT={medical_duration_days}']
         }
-        ref.child(uid).update(updated_information)
+        created_event = service.events().insert(calendarId='primary', body=event).execute()
+
+        pill_logs_ref = db.reference(f"users/{uid}/pill_logs")
+        instances = service.events().instances(
+            calendarId='primary',
+            eventId=created_event['id'],
+            timeMin=utc_time.isoformat(),
+            maxResults=medical_duration_days
+        ).execute().get('items', [])
+
+        updates = {}
+        for instance in instances:
+            instance_time_utc = datetime.datetime.fromisoformat(instance['start']['dateTime'])
+            updates[instance['id']] = {
+                "googleEventInstanceId": instance['id'],
+                "scheduledStartTime": instance_time_utc.isoformat(timespec='seconds').replace('+00:00', 'Z'),
+                "isTaken": False,
+                "takenAt": None
+            }
+
+        pill_logs_ref.update(updates)
+        return jsonify({"message": "Schedule created", "event_count": len(instances)}), 200
+
     except Exception as e:
-        return error_response("SERVER_ERROR", "Failed to update medical information", 500)
+        return error_response("CALENDAR_ERROR", str(e), 500)
+
+@app.route("/mark_pill_taken", methods=["POST"])
+def mark_pill_taken():
+    uid = session.get("uid") or request.json.get("uid")
+    if not uid:
+        return error_response("UNAUTHORIZED", "User not logged in", 401)
+
     try:
-        service = authenticate_google_calendar()
-        create_recurring_daily_event(service, email, medical_time, medical_duration_days)
+        utc_now = datetime.datetime.now(datetime.timezone.utc)
+        utc_plus_7 = datetime.timezone(datetime.timedelta(hours=7))
+        current_time = utc_now.astimezone(utc_plus_7)  
+
+        # Just mathcing ~ 30 mins.
+        pill_logs_ref = db.reference(f"users/{uid}/pill_logs")
+        all_logs = pill_logs_ref.get() or {}
+        
+        for instance_id, log in all_logs.items():
+            if log.get("isTaken"):
+                continue
+
+            scheduled_utc = datetime.datetime.fromisoformat(log["scheduledStartTime"].replace('Z', '+00:00'))
+            scheduled_local = scheduled_utc.astimezone(utc_plus_7)  # Convert to UTC+7
+            
+            time_diff = abs((current_time - scheduled_local).total_seconds() / 60)
+            if time_diff <= 30: # THE CODE FOR MATCHING TIME.
+                pill_logs_ref.child(instance_id).update({
+                    "isTaken": True,
+                    "takenAt": current_time.isoformat(timespec='seconds')
+                })
+                return jsonify({
+                    "message": "Pill marked as taken",
+                    "scheduled_time": scheduled_local.strftime("%H:%M"),
+                    "taken_at": current_time.strftime("%H:%M")
+                }), 200
+
+        return error_response("NO_MATCH", "No active pill within ±30 minutes", 400)
+
     except Exception as e:
-        return error_response("CALENDAR_ERROR", "Failed to create calendar event", 500)
-    return jsonify({"message": "Medical information updated successfully"}), 200
+        return error_response("SERVER_ERROR", str(e), 500)
 
 if __name__ == "__main__":
     app.run(debug=True)

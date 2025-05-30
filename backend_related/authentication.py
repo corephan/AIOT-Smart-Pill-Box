@@ -15,3 +15,15 @@ def check_password(password, confirm_password=None):
     if not any(char in string.punctuation for char in password):
         return "Password must contain at least one special character."
     return None
+
+def is_valid_vietnamese_phone_number(phone_number: str) -> bool:
+    pattern = r'^(03|05|07|08|09)\d{8}$'
+    return bool(re.match(pattern, phone_number))
+
+def is_valid_username(username: str) -> bool:
+    if len(username) > 10:
+        return False
+    
+    pattern = r'^[\w\sÀ-ỹà-ỹ]+$'
+    
+    return bool(re.match(pattern, username, re.UNICODE))
