@@ -12,6 +12,7 @@ DEFAULT_TIMEZONE = "Asia/Bangkok"
 EVENT_DURATION_MINUTES = 15
 
 class GoogleCalendarAPI:
+    """"Declare file of Google Calendar API"""
     def __init__(self, token_path = "token.json", credentials_path = "credentials.json"):
         self.token_path = token_path
         self.credentials_path = credentials_path

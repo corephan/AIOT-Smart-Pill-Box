@@ -5,6 +5,7 @@ from datetime import timedelta
 import smtplib
 from email.mime.text import MIMEText
 import datetime
+import pytz
 
 # FLASK AND FIREBASE LIBRARY
 import bcrypt
@@ -13,6 +14,7 @@ from flask import Flask, jsonify, request, session
 from flask_cors import CORS
 from flask_session import Session
 from firebase_admin import auth, credentials, db, firestore, initialize_app
+from flask_apscheduler import APScheduler
 
 # PROJECT MODULES
 from authentication import check_password, is_valid_email, is_valid_vietnamese_phone_number, is_valid_username
@@ -27,6 +29,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
 SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 calendar_api = GoogleCalendarAPI()
 # DECLARATION SOME NESSCARY THINGS:
@@ -41,6 +44,9 @@ initialize_app(cred, {
     "databaseURL": "https://aiot-medical-box-default-rtdb.asia-southeast1.firebasedatabase.app/"
 })
 FIREBASE_AUTH_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyAhRZ159X6lSY5ewAXS55Rd7zqR0wjNAEk"
+scheduler = APScheduler()
+scheduler.init_app(app)
+utc_plus_7 = datetime.timezone(datetime.timedelta(hours=7))
 
 # SOME USEFUL FUNCTIONS FOR SOME FUNCTIONALITIES:
 def id_token_c(id_token):
@@ -57,16 +63,61 @@ def error_response(code: str, message: str, status: int = 400):
         "message": message
     }), status
 
+def check_pill_reminders():
+    with app.app_context():
+        now_local = datetime.datetime.now(utc_plus_7)
+        users_ref = db.reference("users")
+        users = users_ref.get()
+
+        if users:
+            for user_id, user_data in users.items():
+                if 'pill_logs' in user_data:
+                    for log_id, log_data in user_data['pill_logs'].items():
+                        if not log_data.get('isTaken'):
+                            try:
+                                scheduled_start_time_str = log_data['scheduledStartTime']
+                                # Assuming scheduledStartTime is stored in UTC with 'Z'
+                                if scheduled_start_time_str.endswith('Z'):
+                                    scheduled_start_time_utc = datetime.datetime.fromisoformat(scheduled_start_time_str.replace('Z', '+00:00'))
+                                else:
+                                    scheduled_start_time_utc = datetime.datetime.fromisoformat(scheduled_start_time_str)
+
+                                scheduled_start_time_local = scheduled_start_time_utc.astimezone(utc_plus_7)
+                                time_difference = now_local - scheduled_start_time_local
+                                time_difference_minutes = time_difference.total_seconds() / 60
+
+                                # Flags to track if reminders have been triggered
+                                fifteen_min_triggered = log_data.get('fifteen_min_triggered', False)
+                                sixty_min_triggered = log_data.get('sixty_min_triggered', False)
+
+                                if 15 <= time_difference_minutes < 60 and not fifteen_min_triggered:
+                                    print(f"[{now_local.strftime('%Y-%m-%d %H:%M:%S')}] User {user_id}: 15-Minute Reminder - Has not taken pill scheduled for {scheduled_start_time_local.strftime('%H:%M')}.")
+                                    # Trigger notification here
+                                    users_ref.child(user_id).child('pill_logs').child(log_id).update({'fifteen_min_triggered': True})
+
+
+                                elif time_difference_minutes >= 60 and not sixty_min_triggered:
+                                    users_ref.child(user_id).child('pill_logs').child(log_id).update({'missed': True, 'sixty_min_triggered': True})
+                                    print(f"[{now_local.strftime('%Y-%m-%d %H:%M:%S')}] User {user_id}: Marked pill scheduled for {scheduled_start_time_local.strftime('%H:%M')} as forgotten.")
+                                    # Log this event
+
+                            except ValueError as e:
+                                print(f"Error processing time for user {user_id}, log {log_id}: {e}")
+                            except KeyError as e:
+                                print(f"Missing key in data for user {user_id}, log {log_id}: {e}")
+scheduler.add_job(id='check_pill_reminders', func=check_pill_reminders, trigger='interval', minutes=1)
+
 # THE BLOCK OF CODE USED FOR REGISTERATION:
 @app.route("/register", methods = ["POST"])
 def register():
     data = request.get_json() or {}
+
     email = data["email"]
     password = data["password"]
     phone_number = data.get("phone_number")
     username = data.get("username") 
 
-    # Check validation of email and password:
+    # --- FORM CHECKING ---
     if not username:
         return error_response("USERNAME_REQUIRED", "Username is required")
     if not email:
@@ -75,7 +126,8 @@ def register():
         return error_response("EMAIL_INVALID", "Invalid email format")
     if not password:
         return error_response("PASSWORD_REQUIRED", "Password is required")
-    if check_password(password):
+    password_validation_error = check_password(password)
+    if password_validation_error:
         return error_response("PASSWORD_INVALID", "Password does not meet security requirements.")
     if not phone_number:
         return error_response("PHONE_NUMBER_REQUIRED", "Phone number is required")
@@ -92,21 +144,21 @@ def register():
         return error_response("INTERNAL_ERROR", "Internal server error. Please try again later.")
     try:
         verification_link = auth.generate_email_verification_link(email)
-        send_email_verification(email, verification_link)
+        send_email_verification(email, verification_link, user_name=username, sender_name="Duck")
     except Exception:
         # If fail -> Still allow to register
         pass 
-    # Save something to session:
+    # --- FLASK SESSION SAVING ---
     session["uid"] = user.uid
     session["email"] = email
-    # Save something to the database:
+    # --- FIREBASE DATABASE SAVING ---
     ref = db.reference("users")
     user_data = {
         user.uid: {
             "user_info":{
                 "email": email,
                 "phone_number": phone_number,
-                "username": data.get("username")
+                "username": username
             }
         }
     }
@@ -121,10 +173,11 @@ def register():
 @app.route("/login", methods=["POST"])
 def login():
     data = request.get_json()
+
     email = data.get("email")
     password = data.get("password")
 
-    # Check validation of email and password:
+    # --- FORM CHECKING ---
     if not email:
         return error_response("EMAIL_REQUIRED", "Email is required")
     if not is_valid_email(email):
@@ -141,8 +194,7 @@ def login():
             "password": password,
             'returnSecureToken': True
         })
-        if response.status_code != 200:
-            return error_response("AUTH_FAILED", "Authentication failed. Please check your credentials.")
+        response.raise_for_status()
         if response.status_code == 200:
             user = auth.get_user_by_email(email) # To get the status whether user is verified or not.
             
@@ -168,14 +220,16 @@ def login():
         if err.response.status_code == 400:
             error_data = err.response.json()
             error_message = error_data.get("error", {}).get("message")
+
             if error_message == "EMAIL_NOT_FOUND":
                 return error_response("EMAIL_NOT_FOUND", "Email not found")
             elif error_message == "INVALID_PASSWORD":
                 return error_response("INVALID_PASSWORD", "Invalid password")
-        return error_response("AUTH_FAILED", str(err))
-    
-    except Exception as e:
-        app.logger.error(f"Error during login: {e}")
+            else:
+                return error_response("AUTH_FAILED", error_message)
+        
+        return error_response("AUTH_FAILED", "Authentication failed due to credentials, network or server issues.")
+    except Exception:
         return error_response("INTERNAL_ERROR", "Internal server error. Please try again later.")
 
 # THE BLOCK OF CODE FOR PASSWORD RESET:
@@ -324,4 +378,5 @@ def mark_pill_taken():
         return error_response("SERVER_ERROR", str(e), 500)
 
 if __name__ == "__main__":
+    scheduler.start()
     app.run(debug=True)

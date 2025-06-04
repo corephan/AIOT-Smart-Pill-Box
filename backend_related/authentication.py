@@ -1,29 +1,47 @@
 import re
 import string 
-import smtplib 
-from email.mime.text import MIMEText
 
-def is_valid_email(email):
-    email_regex = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
-    return re.match(email_regex, email) is not None
+EMAIL_REGEX = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+VIETNAMESE_PHONE_NUMBER_REGEX = r'^(03|05|07|08|09)\d{8}$'
+USERNAME_REGEX = r'^[\w\sÀ-ỹà-ỹ]+$' 
 
-def check_password(password, confirm_password=None):
-    if confirm_password and password != confirm_password:
-        return "Password and confirm password do not match."
-    if len(password) <= 6:
-        return "Password must be longer than 6 characters."
-    if not any(char in string.punctuation for char in password):
+# --- PASSWORD VALIDATION ---
+PASSWORD_MIN_LENGTH = 8 
+PASSWORD_HAS_DIGIT_REGEX = r'\d'
+PASSWORD_HAS_UPPERCASE_REGEX = r'[A-Z]'
+PASSWORD_HAS_LOWERCASE_REGEX = r'[a-z]'
+PASSWORD_HAS_SPECIAL_CHAR_REGEX = f"[{re.escape(string.punctuation)}]"
+
+# --- VALIDATION FUNCTIONS ---
+
+def is_valid_email(email: str) -> bool:
+    return bool(re.fullmatch(EMAIL_REGEX, email))
+
+def check_password(password: str) -> str | None:
+    
+    if len(password) < PASSWORD_MIN_LENGTH:
+        return f"Password must be at least {PASSWORD_MIN_LENGTH} characters long."
+    
+    if not re.search(PASSWORD_HAS_DIGIT_REGEX, password):
+        return "Password must contain at least one digit."
+    
+    if not re.search(PASSWORD_HAS_UPPERCASE_REGEX, password):
+        return "Password must contain at least one uppercase letter."
+    
+    if not re.search(PASSWORD_HAS_LOWERCASE_REGEX, password):
+        return "Password must contain at least one lowercase letter."
+    
+    if not re.search(PASSWORD_HAS_SPECIAL_CHAR_REGEX, password):
         return "Password must contain at least one special character."
+    
     return None
 
 def is_valid_vietnamese_phone_number(phone_number: str) -> bool:
-    pattern = r'^(03|05|07|08|09)\d{8}$'
-    return bool(re.match(pattern, phone_number))
+    return bool(re.fullmatch(VIETNAMESE_PHONE_NUMBER_REGEX, phone_number))
 
 def is_valid_username(username: str) -> bool:
-    if len(username) > 10:
+    MAX_USERNAME_LENGTH = 10
+    if len(username) > MAX_USERNAME_LENGTH:
         return False
     
-    pattern = r'^[\w\sÀ-ỹà-ỹ]+$'
-    
-    return bool(re.match(pattern, username, re.UNICODE))
+    return bool(re.fullmatch(USERNAME_REGEX, username, re.UNICODE))
