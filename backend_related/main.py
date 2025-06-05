@@ -6,11 +6,13 @@ import smtplib
 from email.mime.text import MIMEText
 import datetime
 import pytz
+import qrcode 
+import io 
 
 # FLASK AND FIREBASE LIBRARY
 import bcrypt
 import requests
-from flask import Flask, jsonify, request, session
+from flask import Flask, jsonify, request, session, send_file
 from flask_cors import CORS
 from flask_session import Session
 from firebase_admin import auth, credentials, db, firestore, initialize_app
@@ -257,23 +259,70 @@ def reset_password():
     except Exception as e:
         return error_response("INTERNAL_ERROR", "Internal server error. Please try again later.")
     
-# THE BLOCK OF CODE TO HANDLE OTP-AUTHENTICATION:
-@app.route('/OTP_login', methods=['POST'])
-def firebase_login():
-    auth_header = request.headers.get('Authorization')
+# -------------------- THE BLOCK OF CODE FOR DEVICES REGISTERATION --------------------:
+@app.route("/pair_device", methods=["POST"])
+def pair_device():
+    uid = session.get("uid")
+    if not uid:
+        return jsonify({"message": "User not authenticated!"}), 401
+    
+    data = request.get_json()
+    device_udid = data.get("device_uid") if data else None
+    if not device_udid:
+        return jsonify({"message": "Device UDID is required."}), 400
 
-    if not auth_header or not auth_header.startswith("Bearer "):
-        return jsonify({'error': 'Missing or invalid token'}), 401
+    device_owner_ref = db.reference(f'device_owners/{device_udid}')
+    current_owner_uid = device_owner_ref.get()
 
-    id_token = auth_header.split(' ')[1]
-
+    if current_owner_uid:
+        if current_owner_uid == uid:
+            return jsonify({"message": "Device already paired with this user."}), 200
+        else:
+            return jsonify({"message": "Device already paired with another user"}), 400
     try:
-        decoded_token = auth.verify_id_token(id_token)
-        uid = decoded_token['uid']
-        phone_number = decoded_token.get('phone_number')
-        return jsonify({'message': f'Logged in as UID {uid}', 'phone': phone_number}), 200
+        device_owner_ref.set(uid)
+        user_owned_devices_ref = db.reference(f"users/{uid}/owned_iot_devices")
+        user_owned_devices_ref.update({
+            device_udid: True
+        })
+
+        print(f"Device {device_udid} paired with user {uid}")
+        return jsonify({"message": "Device paired successfully!", "device_uid": device_udid}), 200
     except Exception as e:
-        return jsonify({'error': 'Token verification failed', 'details': str(e)}), 403
+        print(f"[ERROR] Device pairing failed for UID {uid}, UDID {device_udid}: {e}")
+        return jsonify({"message": f"Failed to pair device: {str(e)}"}), 500
+
+# -------------------- THE BLOCK OF CODE FOR CREATING QR CODE --------------------:
+
+@app.route("/generate_QR_code", methods=["POST"])
+def generate_QR_code():
+    data = request.get_json(silent=True)
+    device_udid = data.get("device_udid") if data else None
+    if not device_udid:
+        return jsonify({"message": "Device UDID is required."}), 400
+
+    # Generate QR code
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(device_udid)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+
+    # Stream QR image to client
+    img_io = io.BytesIO()
+    img.save(img_io, format="PNG")
+    img_io.seek(0)
+
+    return send_file(
+        img_io,
+        mimetype='image/png',
+        as_attachment=True,
+        download_name=f"{device_udid}.png"
+    )
 
 # THE BLOCK FOR ADDING PILL:
 @app.route("/medical_management", methods=["POST"])
@@ -340,7 +389,12 @@ def medical_management():
 
 @app.route("/mark_pill_taken", methods=["POST"])
 def mark_pill_taken():
-    uid = session.get("uid") or request.json.get("uid")
+    data = request.get_json() or {}
+    device_id = data.get("device_id")
+    if not device_id:
+        return error_response("DEVICE_ID_REQUIRED", "Device ID is required.", 400)
+    device_owner_ref = db.reference(f"device_owners/{device_id}")
+    uid = device_owner_ref.get()
     if not uid:
         return error_response("UNAUTHORIZED", "User not logged in", 401)
 

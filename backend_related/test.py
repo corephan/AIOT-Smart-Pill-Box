@@ -11,6 +11,7 @@ payload = {
     "phone_number": "0383969099",
     "user_name": "Test User",
     "username": "testuser",
+    "device_udid": "123456",
+    "device_uid": "123456"
 }
-response = requests.post("http://127.0.0.1:5000/register", json=payload)
-print(response.json())
+response = requests.post("http://127.0.0.1:5000/pair_device", json=payload)
