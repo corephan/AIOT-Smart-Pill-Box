@@ -4,7 +4,7 @@ import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import Service from './pages/Service';
+import Service from './pages/Service'; // Hi, this is a comment and it doesn't affect this program :>
 
 function App() {
     const [user, setUser] = useState(() => {
