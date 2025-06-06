@@ -3,7 +3,8 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 
 import Navbar from './components/Navbar';
-import AuthPage from './pages/Authpage'; // Hi, this is an comment
+import AuthPage from './pages/AuthPage';
+
 
 function Home() {
   return (
