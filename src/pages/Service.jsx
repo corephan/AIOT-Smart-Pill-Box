@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import './Service.css';
+import './Service2.css';
 
 function Service() {
     const navigate = useNavigate();
@@ -25,7 +25,7 @@ function Service() {
     });
 
     const [newList, setNewList] = useState({ name: '', condition: '' });
-    const [medicationData, setMedicationData] = useState({ name: '', dose: '', time: '', note: '' });
+    const [medicationData, setMedicationData] = useState({ id: null, name: '', dose: '', time: '', note: '' });
 
     const [popupListIndex, setPopupListIndex] = useState(null);
     const [popupMedIndex, setPopupMedIndex] = useState(null);
@@ -53,7 +53,12 @@ function Service() {
     };
 
     const handleAddList = () => {
-        const updated = [...patientLists, { ...newList, medications: [] }];
+        if (!newList.name.trim() || !newList.condition.trim()) {
+            alert('⚠️ Vui lòng nhập đầy đủ tên người dùng và tên bệnh.');
+            return;
+        }
+        const newListWithId = { ...newList, id: Date.now(), medications: [] };
+        const updated = [...patientLists, newListWithId];
         setPatientLists(updated);
         saveLists(updated);
         setNewList({ name: '', condition: '' });
@@ -61,6 +66,7 @@ function Service() {
     };
 
     const handleDeleteList = (index) => {
+        if (!window.confirm('Bạn có chắc muốn xoá danh sách này?')) return;
         const updated = [...patientLists];
         updated.splice(index, 1);
         setPatientLists(updated);
@@ -73,17 +79,24 @@ function Service() {
         if (medIndex !== null) {
             setMedicationData({ ...patientLists[listIndex].medications[medIndex] });
         } else {
-            setMedicationData({ name: '', dose: '', time: '', note: '' });
+            setMedicationData({ id: null, name: '', dose: '', time: '', note: '' });
         }
         setShowMedPopup(true);
     };
 
     const saveMedication = () => {
+        if (!medicationData.name.trim() || !medicationData.dose.trim() || !medicationData.time.trim()) {
+            alert('⚠️ Vui lòng nhập đầy đủ tên thuốc, liều lượng và thời gian.');
+            return;
+        }
+
         const updated = [...patientLists];
         if (popupMedIndex !== null) {
+            // Update existing medication
             updated[popupListIndex].medications[popupMedIndex] = medicationData;
         } else {
-            updated[popupListIndex].medications.push(medicationData);
+            // Add new medication with unique id
+            updated[popupListIndex].medications.push({ ...medicationData, id: Date.now() });
         }
         setPatientLists(updated);
         saveLists(updated);
@@ -91,6 +104,7 @@ function Service() {
     };
 
     const deleteMedication = (listIndex, medIndex) => {
+        if (!window.confirm('Bạn có chắc muốn xoá thuốc này?')) return;
         const updated = [...patientLists];
         updated[listIndex].medications.splice(medIndex, 1);
         setPatientLists(updated);
@@ -112,11 +126,11 @@ function Service() {
     return (
         <div className="service-container">
             <div className="user-info">
-                <span onClick={() => setShowDropdown(!showDropdown)}>👤 {user.username}</span>
+                <span onClick={() => setShowDropdown(!showDropdown)}>👤 {user?.username}</span>
                 {showDropdown && (
                     <div className="dropdown" ref={dropdownRef}>
-                        <p><strong>Email:</strong> {user.email}</p>
-                        <p><strong>SĐT:</strong> {user.phone}</p>
+                        <p><strong>Email:</strong> {user?.email}</p>
+                        <p><strong>SĐT:</strong> {user?.phone}</p>
                         <button onClick={handleSwitchAccount}>🔄 Chuyển tài khoản</button>
                         <button onClick={handleLogout}>🚪 Đăng xuất</button>
                     </div>
@@ -127,11 +141,11 @@ function Service() {
             <button onClick={() => setShowListPopup(true)}>➕ Tạo danh sách mới</button>
 
             {patientLists.map((list, index) => (
-                <div key={index} className="list-card">
+                <div key={list.id || index} className="list-card">
                     <h3>👨‍⚕️ {list.name} – 🏥 {list.condition}</h3>
                     <ul>
                         {list.medications.map((med, idx) => (
-                            <li key={idx}>
+                            <li key={med.id || idx}>
                                 💊 <strong>{med.name}</strong> – {med.dose}, 🕒 {med.time}
                                 {med.note && <span> – 📝 {med.note}</span>}
                                 <button onClick={() => openMedPopup(index, idx)}>✏️ Sửa</button>
@@ -144,32 +158,58 @@ function Service() {
                 </div>
             ))}
 
+            {/* Overlay + Popup tạo danh sách */}
             {showListPopup && (
-                <div className="popup">
-                    <h3>🆕 Tạo danh sách</h3>
-                    <input placeholder="Tên người dùng thuốc" value={newList.name}
-                        onChange={(e) => setNewList({ ...newList, name: e.target.value })} />
-                    <input placeholder="Tên bệnh" value={newList.condition}
-                        onChange={(e) => setNewList({ ...newList, condition: e.target.value })} />
-                    <button onClick={handleAddList}>💾 Lưu</button>
-                    <button onClick={() => setShowListPopup(false)}>❌ Huỷ</button>
-                </div>
+                <>
+                    <div className="overlay" onClick={() => setShowListPopup(false)}></div>
+                    <div className="popup">
+                        <h3>🆕 Tạo danh sách</h3>
+                        <input
+                            placeholder="Tên người dùng thuốc"
+                            value={newList.name}
+                            onChange={(e) => setNewList({ ...newList, name: e.target.value })}
+                        />
+                        <input
+                            placeholder="Tên bệnh"
+                            value={newList.condition}
+                            onChange={(e) => setNewList({ ...newList, condition: e.target.value })}
+                        />
+                        <button onClick={handleAddList}>💾 Lưu</button>
+                        <button onClick={() => setShowListPopup(false)}>❌ Huỷ</button>
+                    </div>
+                </>
             )}
 
+            {/* Overlay + Popup thêm/sửa thuốc */}
             {showMedPopup && (
-                <div className="popup">
-                    <h3>{popupMedIndex !== null ? '✏️ Sửa thuốc' : '➕ Thêm thuốc'}</h3>
-                    <input placeholder="Tên thuốc" value={medicationData.name}
-                        onChange={(e) => setMedicationData({ ...medicationData, name: e.target.value })} />
-                    <input placeholder="Liều lượng" value={medicationData.dose}
-                        onChange={(e) => setMedicationData({ ...medicationData, dose: e.target.value })} />
-                    <input type="time" value={medicationData.time}
-                        onChange={(e) => setMedicationData({ ...medicationData, time: e.target.value })} />
-                    <input placeholder="Ghi chú" value={medicationData.note}
-                        onChange={(e) => setMedicationData({ ...medicationData, note: e.target.value })} />
-                    <button onClick={saveMedication}>💾 Lưu</button>
-                    <button onClick={() => setShowMedPopup(false)}>❌ Huỷ</button>
-                </div>
+                <>
+                    <div className="overlay" onClick={() => setShowMedPopup(false)}></div>
+                    <div className="popup">
+                        <h3>{popupMedIndex !== null ? '✏️ Sửa thuốc' : '➕ Thêm thuốc'}</h3>
+                        <input
+                            placeholder="Tên thuốc"
+                            value={medicationData.name}
+                            onChange={(e) => setMedicationData({ ...medicationData, name: e.target.value })}
+                        />
+                        <input
+                            placeholder="Liều lượng"
+                            value={medicationData.dose}
+                            onChange={(e) => setMedicationData({ ...medicationData, dose: e.target.value })}
+                        />
+                        <input
+                            type="time"
+                            value={medicationData.time}
+                            onChange={(e) => setMedicationData({ ...medicationData, time: e.target.value })}
+                        />
+                        <input
+                            placeholder="Ghi chú"
+                            value={medicationData.note}
+                            onChange={(e) => setMedicationData({ ...medicationData, note: e.target.value })}
+                        />
+                        <button onClick={saveMedication}>💾 Lưu</button>
+                        <button onClick={() => setShowMedPopup(false)}>❌ Huỷ</button>
+                    </div>
+                </>
             )}
         </div>
     );

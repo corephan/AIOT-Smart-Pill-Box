@@ -4,36 +4,50 @@ import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import Service from './pages/Service'; // Hi, this is a comment and it doesn't affect this program :>
+import Service from './pages/Service';
+
+const loadUser = () => {
+  try {
+    const stored = localStorage.getItem('user');
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null;
+  }
+};
+
+function PrivateRoute({ user, children }) {
+  return user ? children : <Navigate to="/login" replace />;
+}
 
 function App() {
-    const [user, setUser] = useState(() => {
-        try {
-            return JSON.parse(localStorage.getItem('user')) || null;
-        } catch {
-            return null;
-        }
-    });
+  const [user, setUser] = useState(loadUser);
 
-    useEffect(() => {
-        const stored = localStorage.getItem('user');
-        if (stored) setUser(JSON.parse(stored));
-    }, []);
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem('user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('user');
+    }
+  }, [user]);
 
-    return (
-        <Router>
-            <Navbar user={user} setUser={setUser} />
-            <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/login" element={<Login setUser={setUser} />} />
-                <Route path="/register" element={<Register />} />
-                <Route
-                    path="/service"
-                    element={user ? <Service user={user} /> : <Navigate to="/login" replace />}
-                />
-            </Routes>
-        </Router>
-    );
+  return (
+    <Router>
+      <Navbar user={user} setUser={setUser} />
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login setUser={setUser} />} />
+        <Route path="/register" element={<Register />} />
+        <Route
+          path="/service"
+          element={
+            <PrivateRoute user={user}>
+              <Service user={user} />
+            </PrivateRoute>
+          }
+        />
+      </Routes>
+    </Router>
+  );
 }
 
 export default App;

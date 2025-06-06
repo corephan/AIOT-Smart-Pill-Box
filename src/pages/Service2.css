@@ -1,0 +1,14 @@
+.service-container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 30px;
+  font-family: 'Arial', sans-serif;
+}
+
+.form-section {
+  margin-bottom: 30px;
+  background: #f5faff;
+  padding: 20px;
+  border-radius: 10px;
+  border: 1px solid #ccc;
+}

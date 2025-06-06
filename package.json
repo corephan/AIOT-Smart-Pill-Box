@@ -1,0 +1,25 @@
+{
+  "name": "git-hub-sources",
+  "version": "1.0.0",
+  "description": "This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/corephan/AIOT-Smart-Pill-Box.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/corephan/AIOT-Smart-Pill-Box/issues"
+  },
+  "homepage": "https://github.com/corephan/AIOT-Smart-Pill-Box#readme",
+  "dependencies": {
+    "express": "^5.1.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  }
+}
