@@ -65,12 +65,17 @@ def error_response(code: str, message: str, status: int = 400):
         "message": message
     }), status
 
+FIRST_MIN = 30
+SECOND_MIN = 60
+
 def check_pill_reminders():
     with app.app_context():
         now_local = datetime.datetime.now(utc_plus_7)
         users_ref = db.reference("users")
         users = users_ref.get()
-
+        if not users:
+            return
+        
         if users:
             for user_id, user_data in users.items():
                 if 'pill_logs' in user_data:
@@ -92,17 +97,22 @@ def check_pill_reminders():
                                 fifteen_min_triggered = log_data.get('fifteen_min_triggered', False)
                                 sixty_min_triggered = log_data.get('sixty_min_triggered', False)
 
-                                if 15 <= time_difference_minutes < 60 and not fifteen_min_triggered:
+                                if FIRST_MIN <= time_difference_minutes < SECOND_MIN and not fifteen_min_triggered:
                                     print(f"[{now_local.strftime('%Y-%m-%d %H:%M:%S')}] User {user_id}: 15-Minute Reminder - Has not taken pill scheduled for {scheduled_start_time_local.strftime('%H:%M')}.")
                                     # Trigger notification here
                                     users_ref.child(user_id).child('pill_logs').child(log_id).update({'fifteen_min_triggered': True})
 
 
-                                elif time_difference_minutes >= 60 and not sixty_min_triggered:
+                                elif SECOND_MIN >= 60 and not sixty_min_triggered:
                                     users_ref.child(user_id).child('pill_logs').child(log_id).update({'missed': True, 'sixty_min_triggered': True})
                                     print(f"[{now_local.strftime('%Y-%m-%d %H:%M:%S')}] User {user_id}: Marked pill scheduled for {scheduled_start_time_local.strftime('%H:%M')} as forgotten.")
                                     # Log this event
+                                    # YOU COULD LOG OR NOTIFY THAT THEY ARE MISSED THE PILL.
 
+                                elif time_difference_minutes > 115 and not log_data.get('missed', False):
+                                    users_ref.child(user_id).child('pill_logs').child(log_id).update({'missed': True})
+                                    print(f"[{now_local.strftime('%Y-%m-%d %H:%M:%S')}] User {user_id}: Marked pill scheduled for {scheduled_start_time_local.strftime('%H:%M')} as missed (over 115 mins).")
+                                    
                             except ValueError as e:
                                 print(f"Error processing time for user {user_id}, log {log_id}: {e}")
                             except KeyError as e:
@@ -142,17 +152,20 @@ def register():
         user = auth.create_user(email=email, password=password)
     except auth.EmailAlreadyExistsError:
         return error_response("EMAIL_ALREADY_EXISTS", "Email already exists")
-    except Exception:
-        return error_response("INTERNAL_ERROR", "Internal server error. Please try again later.")
+    except Exception as e:
+        print(f"[REGISTER ERROR]: {e}")
+        return error_response("INTERNAL_ERROR", "Internal server error. Please try again later!")
+    
     try:
         verification_link = auth.generate_email_verification_link(email)
-        send_email_verification(email, verification_link, user_name=username, sender_name="Duck")
+        send_email_verification(email, verification_link, user_name=username, sender_name="Duck's Service")
     except Exception:
-        # If fail -> Still allow to register
-        pass 
+        print(f"[EMAIL VERIFICATION ERROR] {e}")
+
     # --- FLASK SESSION SAVING ---
     session["uid"] = user.uid
     session["email"] = email
+
     # --- FIREBASE DATABASE SAVING ---
     ref = db.reference("users")
     user_data = {
@@ -207,10 +220,11 @@ def login():
             response = response.json()
             id_token = response["idToken"]
             uid = response["localId"]
+
             # SAVE INFORMATION TO SESSION HERE:
             session["uid"] = uid
             session["email"] = email
-            # SAVE SOMETHING TO DATABASE HERE:
+
             return jsonify({
                 "message": "Login successful",
                 "uid": uid,
@@ -229,9 +243,10 @@ def login():
                 return error_response("INVALID_PASSWORD", "Invalid password")
             else:
                 return error_response("AUTH_FAILED", error_message)
+        return error_response("AUTHE_FAILED", "Authentication failed due to credentials, network or server issues.")
         
-        return error_response("AUTH_FAILED", "Authentication failed due to credentials, network or server issues.")
-    except Exception:
+    except Exception as e:
+        print(f"[LOGIN ERROR] {e}")
         return error_response("INTERNAL_ERROR", "Internal server error. Please try again later.")
 
 # THE BLOCK OF CODE FOR PASSWORD RESET:
@@ -240,12 +255,12 @@ def reset_password():
     data = request.get_json()
     email = data.get("email")
 
+    if not email:
+        return error_response("EMAIL_REQUIRED", "Email is required.")
+    if not is_valid_email(email):
+        return error_response("EMAIL_INVALID", "Invalid email format")
+    
     try:
-        if not email:
-            return error_response("EMAIL_REQUIRED", "Email is required")
-        if not is_valid_email(email):
-            return error_response("EMAIL_INVALID", "Invalid email format")
-        
         # Send the verification link to user.
         user = auth.get_user_by_email(email)
         reset_link = auth.generate_password_reset_link(email)
@@ -257,12 +272,14 @@ def reset_password():
     except auth.UserNotFoundError:
         return error_response("EMAIL_NOT_FOUND", "Email not found.")
     except Exception as e:
+        print(f"[RESET PASSWORD ERROR] {e}")
         return error_response("INTERNAL_ERROR", "Internal server error. Please try again later.")
     
 # -------------------- THE BLOCK OF CODE FOR DEVICES REGISTERATION --------------------:
 @app.route("/pair_device", methods=["POST"])
 def pair_device():
     uid = session.get("uid")
+
     if not uid:
         return jsonify({"message": "User not authenticated!"}), 401
     
@@ -298,45 +315,97 @@ def pair_device():
 def generate_QR_code():
     data = request.get_json(silent=True)
     device_udid = data.get("device_udid") if data else None
+
     if not device_udid:
         return jsonify({"message": "Device UDID is required."}), 400
 
-    # Generate QR code
-    qr = qrcode.QRCode(
-        version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_L,
-        box_size=10,
-        border=4,
-    )
-    qr.add_data(device_udid)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white")
+    try:
+        # Generate QR code
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(device_udid)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
 
-    # Stream QR image to client
-    img_io = io.BytesIO()
-    img.save(img_io, format="PNG")
-    img_io.seek(0)
+        # Stream QR image to client
+        img_io = io.BytesIO()
+        img.save(img_io, format="PNG")
+        img_io.seek(0)
 
-    return send_file(
-        img_io,
-        mimetype='image/png',
-        as_attachment=True,
-        download_name=f"{device_udid}.png"
-    )
+        return send_file(
+            img_io,
+            mimetype='image/png',
+            as_attachment=True,
+            download_name=f"{device_udid}.png"
+        )
+    
+    except Exception as e:
+        print(f"[QR CODE ERROR] {e}")
+        return jsonify({"message": "Failed to generate QR code."}), 500
+
+# -------------------- THE BLOCK OF CODE FOR CREATING QR CODE -------------------- (I don't need this block anymore)
+@app.route("/add_patient_list", methods=["POST"])
+def add_profile():
+    data = request.get_json()
+    uid = session.get("uid") or data.get("uid")
+    if not uid:
+        return error_response("UNAUTHORIZED", "User not logged in", 401)
+    name = data.get("name")
+    condition = data.get("condition")
+    allergic = data.get("allergic", "")
+    if not name or not condition:
+        return error_response("MISSING_FIELDS", "Name and disease name are required", 400)
+    profile_data = {
+        "name": name, 
+        "condition": condition,
+        "allergic": allergic,
+        "medications": {}
+    }
+    ref = db.reference(f"users/{uid}/patient_lists")
+    new_list_ref = ref.push(profile_data)
+    return jsonify({"message": "Patient list added successfully", "list_id": new_list_ref.key}), 201
 
 # THE BLOCK FOR ADDING PILL:
 @app.route("/medical_management", methods=["POST"])
 def medical_management():
     data = request.get_json()
-    uid = session.get("uid") or data.get("uid")
-    email = session.get("email") or data.get("email")
-    
+    uid = session.get("uid") 
+    email = session.get("email") 
+
     if not uid or not email:
         return error_response("UNAUTHORIZED", "User not logged in", 401)
     
+    # ---- Medication info ----:
     medical_time = data.get("medical_time") 
     medical_duration_days = data.get("medical_duration_days")
+    medical_name = data.get("name")
+    medical_note = data.get("note", "Nothing")
+    dose = data.get("dose")
+
+    if not medical_time or not medical_duration_days or not medical_name or not medical_note:
+        return error_response("MISSING_FIELDS", "Medical time, duration, name and note are required", 400)
+    try:
+        medical_duration_days = int(medical_duration_days)
+        if medical_duration_days <= 0:
+            return error_response("INVALID_DURATION", "Duration must be greater than 0.")
+    except Exception:
+        return error_response("INVALID_DURATION", "Duration must be an integer greater than 0.")
     
+    medication_data = {
+        "medical_time": medical_time,
+        "medical_duration_days": medical_duration_days,
+        "medical_name": medical_name,
+        "medical_note": medical_note,
+        "dose": dose
+    }
+
+    med_ref = db.reference(f"users/{uid}/medical_info/{medical_name}")
+    med_ref.set(medication_data)
+
     try:
         local_time = datetime.datetime.strptime(medical_time, "%H:%M").time()
         utc_plus_7 = datetime.timezone(datetime.timedelta(hours=7))
@@ -350,7 +419,7 @@ def medical_management():
         api = GoogleCalendarAPI()
         service = api.authenticate_google_calendar()
         event = {
-            'summary': "Take Medication",
+            'summary': "Take {name}",
             'start': {
                 'dateTime': utc_time.isoformat(),
                 'timeZone': 'UTC'
@@ -382,7 +451,10 @@ def medical_management():
             }
 
         pill_logs_ref.update(updates)
-        return jsonify({"message": "Schedule created", "event_count": len(instances)}), 200
+        return jsonify({
+            "message": "Medication and schedule created",
+            "event_count": len(instances)
+        }), 201
 
     except Exception as e:
         return error_response("CALENDAR_ERROR", str(e), 500)
@@ -391,10 +463,13 @@ def medical_management():
 def mark_pill_taken():
     data = request.get_json() or {}
     device_id = data.get("device_id")
+
     if not device_id:
         return error_response("DEVICE_ID_REQUIRED", "Device ID is required.", 400)
+    
     device_owner_ref = db.reference(f"device_owners/{device_id}")
     uid = device_owner_ref.get()
+
     if not uid:
         return error_response("UNAUTHORIZED", "User not logged in", 401)
 
@@ -415,7 +490,7 @@ def mark_pill_taken():
             scheduled_local = scheduled_utc.astimezone(utc_plus_7)  # Convert to UTC+7
             
             time_diff = abs((current_time - scheduled_local).total_seconds() / 60)
-            if time_diff <= 30: # THE CODE FOR MATCHING TIME.
+            if time_diff <= 90: # THE CODE FOR MATCHING TIME.
                 pill_logs_ref.child(instance_id).update({
                     "isTaken": True,
                     "takenAt": current_time.isoformat(timespec='seconds')

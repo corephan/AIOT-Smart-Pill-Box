@@ -5,10 +5,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-SMTP_SERVER = os.getenv("SMTP_SERVER")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-SENDER_EMAIL = os.getenv("SENDER_EMAIL")
-SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")
+SMTP_SERVER: str = os.getenv("SMTP_SERVER", "")
+SMTP_PORT: int = int(os.getenv("SMTP_PORT", 587))
+SENDER_EMAIL: str = os.getenv("SENDER_EMAIL", "")
+SENDER_PASSWORD: str = os.getenv("SENDER_PASSWORD", "")
 
 VERIFICATION_EMAIL_SUBJECT = "Action Required: Verify Your Email Address"
 VERIFICATION_EMAIL_BODY_TEMPLATE = """Hi {user_name},
@@ -39,6 +39,10 @@ Best regards,
 """
 
 def send_email(to_email: str, subject: str, body: str) -> bool:
+    """
+    Send an email using SMTP.
+    Returns True if sent successfully, False otherwise.
+    """
     if not all([SMTP_SERVER, SENDER_EMAIL, SENDER_PASSWORD]):
         return False
 
@@ -56,10 +60,30 @@ def send_email(to_email: str, subject: str, body: str) -> bool:
     except Exception:
         return False
 
-def send_email_verification(email: str, link: str, user_name: str = "User", sender_name: str = "Your Team") -> bool:
-    body = VERIFICATION_EMAIL_BODY_TEMPLATE.format(user_name=user_name, link=link, sender_name=sender_name)
+def send_email_verification(
+    email: str,
+    link: str,
+    user_name: str = "User",
+    sender_name: str = "Your Team"
+) -> bool:
+    """
+    Send an email verification link to the user.
+    """
+    body = VERIFICATION_EMAIL_BODY_TEMPLATE.format(
+        user_name=user_name, link=link, sender_name=sender_name
+    )
     return send_email(email, VERIFICATION_EMAIL_SUBJECT, body)
 
-def send_reset_password(email: str, link: str, user_name: str = "User", sender_name: str = "Your Team") -> bool:
-    body = RESET_PASSWORD_BODY_TEMPLATE.format(user_name=user_name, link=link, sender_name=sender_name)
+def send_reset_password(
+    email: str,
+    link: str,
+    user_name: str = "User",
+    sender_name: str = "Your Team"
+) -> bool:
+    """
+    Send a password reset link to the user.
+    """
+    body = RESET_PASSWORD_BODY_TEMPLATE.format(
+        user_name=user_name, link=link, sender_name=sender_name
+    )
     return send_email(email, RESET_PASSWORD_SUBJECT, body)
