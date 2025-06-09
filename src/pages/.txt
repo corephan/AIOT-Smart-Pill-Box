@@ -1,0 +1,34 @@
+.reset-password-container {
+  max-width: 400px;
+  margin: 80px auto;
+  background: #f4f9ff;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+  text-align: center;
+  font-family: 'Arial', sans-serif;
+}
+
+.reset-password-container input {
+  width: 100%;
+  padding: 12px;
+  margin: 10px 0;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+.reset-password-container button {
+  padding: 10px 20px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.reset-password-container .message {
+  margin-top: 15px;
+  color: #006400;
+  font-style: italic;
+}
