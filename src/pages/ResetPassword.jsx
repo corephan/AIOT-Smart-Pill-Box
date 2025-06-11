@@ -6,17 +6,53 @@ function ResetPassword() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
-  const handleReset = () => {
-    // Giả lập gửi email
-    if (!email.includes('@')) {
-      setMessage('❌ Vui lòng nhập địa chỉ email hợp lệ.');
-    } else {
-      setMessage(
-        '📨 Nếu email có trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi.'
-      );
-      // Sau vài giây có thể quay về login nếu muốn
-      setTimeout(() => navigate('/login'), 3000);
+  const handleReset = async () => {
+    setMessage('');
+    setError('');
+
+    if (!email.trim()) {
+      setError('❌ Vui lòng nhập địa chỉ email.');
+      return;
+    }
+
+    try {
+      const response = await fetch('/reset_password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setMessage('📨 ' + data.message);
+        setTimeout(() => navigate('/login'), 3000);
+      } else {
+        // Xử lý các mã lỗi cụ thể
+        switch (data.code) {
+          case 'EMAIL_REQUIRED':
+            setError('❌ Email là bắt buộc.');
+            break;
+          case 'EMAIL_INVALID':
+            setError('❌ Định dạng email không hợp lệ.');
+            break;
+          case 'EMAIL_NOT_FOUND':
+            setError('❌ Email không tồn tại trong hệ thống.');
+            break;
+          case 'FAILED':
+            setError('❌ Gửi yêu cầu thất bại. Vui lòng thử lại.');
+            break;
+          case 'INTERNAL_ERROR':
+            setError('❌ Lỗi hệ thống. Vui lòng thử lại sau.');
+            break;
+          default:
+            setError('❌ Đã xảy ra lỗi không xác định.');
+        }
+      }
+    } catch (err) {
+      setError('❌ Không thể kết nối tới máy chủ.');
     }
   };
 
@@ -31,7 +67,8 @@ function ResetPassword() {
         onChange={(e) => setEmail(e.target.value)}
       />
       <button onClick={handleReset}>Gửi yêu cầu</button>
-      {message && <p className="message">{message}</p>}
+      {error && <p className="message error">{error}</p>}
+      {message && <p className="message success">{message}</p>}
     </div>
   );
 }

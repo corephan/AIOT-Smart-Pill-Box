@@ -1,0 +1,39 @@
+import React, { useState } from 'react';
+import './ChatWidget.css';
+
+function ChatWidget() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [userInput, setUserInput] = useState('');
+
+  const toggleChat = () => {
+    setIsOpen(!isOpen);
+  };
+
+  const handleSend = () => {
+    // Xử lý gửi tin nhắn ở đây
+    console.log("User input:", userInput);
+    setUserInput('');
+  };
+
+  return (
+    <div className="chat-widget">
+      <button className="chat-button" onClick={toggleChat}>
+        💬
+      </button>
+      {isOpen && (
+        <div className="chat-box">
+          <p>Bạn đang cần tư vấn về vấn đề gì?</p>
+          <input
+            type="text"
+            value={userInput}
+            onChange={(e) => setUserInput(e.target.value)}
+            placeholder="Nhập câu hỏi của bạn..."
+          />
+          <button onClick={handleSend}>Gửi</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default ChatWidget;
