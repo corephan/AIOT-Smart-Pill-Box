@@ -44,3 +44,19 @@
     cursor: pointer;
     font-size: 16px;
 }
+
+/* ✅ Thêm mới cho phần "Quên mật khẩu?" */
+.forgot-password {
+    margin-top: 16px;
+    text-align: center;
+}
+
+.forgot-password a {
+    color: #007BFF;
+    text-decoration: none;
+    font-size: 14px;
+}
+
+.forgot-password a:hover {
+    text-decoration: underline;
+}

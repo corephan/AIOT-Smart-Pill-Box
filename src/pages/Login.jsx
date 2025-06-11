@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom'; // 👈 Thêm Link ở đây
 import './Login.css';
 
 function Login() {
@@ -56,6 +56,10 @@ function Login() {
                     required
                 />
                 <button type="submit">Đăng nhập</button>
+
+                <p className="forgot-password">
+                    <Link to="/reset-password">🔁 Quên mật khẩu?</Link>
+                </p>
             </form>
         </div>
     );
