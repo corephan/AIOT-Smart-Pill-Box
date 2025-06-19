@@ -17,10 +17,10 @@ from flask_cors import CORS
 from flask_session import Session
 from firebase_admin import auth, credentials, db, firestore, initialize_app
 from flask_apscheduler import APScheduler
-
+from redis import Redis
 # PROJECT MODULES
 from authentication import check_password, is_valid_email, is_valid_vietnamese_phone_number, is_valid_username
-from mail_services import send_email_verification, send_reset_password
+from mail_services import send_email_verification, send_reset_password, send_email
 from API import GoogleCalendarAPI
 
 # GOOGLE CALENDAR LIBRARIES:
@@ -46,9 +46,12 @@ initialize_app(cred, {
     "databaseURL": "https://aiot-medical-box-default-rtdb.asia-southeast1.firebasedatabase.app/"
 })
 FIREBASE_AUTH_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyAhRZ159X6lSY5ewAXS55Rd7zqR0wjNAEk"
-scheduler = APScheduler()
-scheduler.init_app(app)
 utc_plus_7 = datetime.timezone(datetime.timedelta(hours=7))
+app.config['SESSION_TYPE'] = 'filesystem'
+# app.config['SESSION_REDIS'] = Redis(host='localhost', port=6379, db=0)
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+app.config['SESSION_COOKIE_SECURE'] = True
+Session(app)
 
 # SOME USEFUL FUNCTIONS FOR SOME FUNCTIONALITIES:
 def id_token_c(id_token):
@@ -68,6 +71,8 @@ def error_response(code: str, message: str, status: int = 400):
 FIRST_MIN = 30
 SECOND_MIN = 60
 
+
+
 def check_pill_reminders():
     with app.app_context():
         now_local = datetime.datetime.now(utc_plus_7)
@@ -75,49 +80,65 @@ def check_pill_reminders():
         users = users_ref.get()
         if not users:
             return
-        
-        if users:
-            for user_id, user_data in users.items():
-                if 'pill_logs' in user_data:
-                    for log_id, log_data in user_data['pill_logs'].items():
-                        if not log_data.get('isTaken'):
-                            try:
-                                scheduled_start_time_str = log_data['scheduledStartTime']
-                                # Assuming scheduledStartTime is stored in UTC with 'Z'
-                                if scheduled_start_time_str.endswith('Z'):
-                                    scheduled_start_time_utc = datetime.datetime.fromisoformat(scheduled_start_time_str.replace('Z', '+00:00'))
-                                else:
-                                    scheduled_start_time_utc = datetime.datetime.fromisoformat(scheduled_start_time_str)
 
-                                scheduled_start_time_local = scheduled_start_time_utc.astimezone(utc_plus_7)
-                                time_difference = now_local - scheduled_start_time_local
-                                time_difference_minutes = time_difference.total_seconds() / 60
+        for user_id, user_data in users.items():
+            user_info = user_data.get('user_info', {})
+            if not user_info:
+                continue
+            user_email = user_info.get('email', '')
+            if not user_email:
+                continue
 
-                                # Flags to track if reminders have been triggered
-                                fifteen_min_triggered = log_data.get('fifteen_min_triggered', False)
-                                sixty_min_triggered = log_data.get('sixty_min_triggered', False)
+            if 'pill_logs' in user_data:
+                for log_id, log_data in user_data['pill_logs'].items():
+                    if not log_data.get('isTaken'):
+                        try:
+                            scheduled_start_time_str = log_data['scheduledStartTime']
+                            # Assuming scheduledStartTime is stored in UTC with 'Z'
+                            if scheduled_start_time_str.endswith('Z'):
+                                scheduled_start_time_utc = datetime.datetime.fromisoformat(scheduled_start_time_str.replace('Z', '+00:00'))
+                            else:
+                                scheduled_start_time_utc = datetime.datetime.fromisoformat(scheduled_start_time_str)
 
-                                if FIRST_MIN <= time_difference_minutes < SECOND_MIN and not fifteen_min_triggered:
-                                    print(f"[{now_local.strftime('%Y-%m-%d %H:%M:%S')}] User {user_id}: 15-Minute Reminder - Has not taken pill scheduled for {scheduled_start_time_local.strftime('%H:%M')}.")
-                                    # Trigger notification here
-                                    users_ref.child(user_id).child('pill_logs').child(log_id).update({'fifteen_min_triggered': True})
+                            scheduled_start_time_local = scheduled_start_time_utc.astimezone(utc_plus_7)
+                            time_difference = (now_local - scheduled_start_time_local)
+                            time_difference_minutes = time_difference.total_seconds() / 60
 
+                            # Flags to track if reminders have been triggered
+                            fifteen_min_triggered = log_data.get('fifteen_min_triggered', False)
+                            sixty_min_triggered = log_data.get('sixty_min_triggered', False)
+                            missed = log_data.get('missed', False)
+                            med_name = log_data.get('name', 'Unknown Medication')
 
-                                elif SECOND_MIN >= 60 and not sixty_min_triggered:
-                                    users_ref.child(user_id).child('pill_logs').child(log_id).update({'missed': True, 'sixty_min_triggered': True})
-                                    print(f"[{now_local.strftime('%Y-%m-%d %H:%M:%S')}] User {user_id}: Marked pill scheduled for {scheduled_start_time_local.strftime('%H:%M')} as forgotten.")
-                                    # Log this event
-                                    # YOU COULD LOG OR NOTIFY THAT THEY ARE MISSED THE PILL.
+                            # Chỉ xử lý event nếu thời điểm hiện tại đã vượt qua scheduled_start_time_local
+                            if time_difference_minutes >= FIRST_MIN and time_difference_minutes < SECOND_MIN and not fifteen_min_triggered:
+                                users_ref.child(user_id).child('pill_logs').child(log_id).update({'fifteen_min_triggered': True})
+                                subject = "Friendly First Reminder: Time to take your medication"
+                                body = f"Hi there! This is a friendly reminder that it's time to take your medication: {med_name}. Please make sure to take it as scheduled."
+                                send_email(user_email, subject, body)
+                                
+                                
 
-                                elif time_difference_minutes > 115 and not log_data.get('missed', False):
-                                    users_ref.child(user_id).child('pill_logs').child(log_id).update({'missed': True})
-                                    print(f"[{now_local.strftime('%Y-%m-%d %H:%M:%S')}] User {user_id}: Marked pill scheduled for {scheduled_start_time_local.strftime('%H:%M')} as missed (over 115 mins).")
-                                    
-                            except ValueError as e:
-                                print(f"Error processing time for user {user_id}, log {log_id}: {e}")
-                            except KeyError as e:
-                                print(f"Missing key in data for user {user_id}, log {log_id}: {e}")
-scheduler.add_job(id='check_pill_reminders', func=check_pill_reminders, trigger='interval', minutes=1)
+                            # Đúng 60 phút sau scheduled time, chưa mark thì mới mark
+                            elif time_difference_minutes >= SECOND_MIN and not sixty_min_triggered:
+                                users_ref.child(user_id).child('pill_logs').child(log_id).update({'missed': False, 'sixty_min_triggered': True})
+                                subject = "Friendly Second Reminder: Time to take your medication"
+                                body = f"Hi there! This is a friendly reminder that it's time to take your medication: {med_name}. Please make sure to take it as scheduled."
+                                send_email(user_email, subject, body)
+                                
+
+                            # Sau 115 phút mà chưa mark missed thì mới mark
+                            elif time_difference_minutes > 115 and not missed:
+                                users_ref.child(user_id).child('pill_logs').child(log_id).update({'missed': True})
+                                subject = "MISSED MEDICATION ALERT"
+                                body = f"Hi there! This is an important alert that you have missed your medication: {med_name}. Please take it as soon as possible and consult your doctor if needed."
+                                send_email(user_email, subject, body)
+                                
+
+                        except ValueError as e:
+                            print(f"Error processing time for user {user_id}, log {log_id}: {e}")
+                        except KeyError as e:
+                            print(f"Missing key in data for user {user_id}, log {log_id}: {e}")
 
 # THE BLOCK OF CODE USED FOR REGISTERATION:
 @app.route("/register", methods = ["POST"])
@@ -360,9 +381,9 @@ def add_profile():
     if not name or not condition:
         return error_response("MISSING_FIELDS", "Name and disease name are required", 400)
     profile_data = {
-        "name": name, 
+        "name": name,
         "condition": condition,
-        "allergic": allergic,
+        "allergy": allergic,  # <-- Use 'allergy' to match frontend
         "medications": {}
     }
     ref = db.reference(f"users/{uid}/patient_lists")
@@ -382,12 +403,13 @@ def medical_management():
     # ---- Medication info ----:
     medical_time = data.get("medical_time") 
     medical_duration_days = data.get("medical_duration_days")
-    medical_name = data.get("name")
-    medical_note = data.get("note", "Nothing")
+    medical_name = data.get("medical_name")
+    medical_note = data.get("note", "")
     dose = data.get("dose")
+    list_id = data.get("list_id")  # Optional: for adding to a specific patient list
 
-    if not medical_time or not medical_duration_days or not medical_name or not medical_note:
-        return error_response("MISSING_FIELDS", "Medical time, duration, name and note are required", 400)
+    if not medical_time or not medical_duration_days or not medical_name or not medical_note or not dose or not list_id:
+        return error_response("MISSING_FIELDS", "Medical time, duration, name, note, dose, and list_id are required", 400)
     try:
         medical_duration_days = int(medical_duration_days)
         if medical_duration_days <= 0:
@@ -396,13 +418,17 @@ def medical_management():
         return error_response("INVALID_DURATION", "Duration must be an integer greater than 0.")
     
     medication_data = {
-        "medical_time": medical_time,
-        "medical_duration_days": medical_duration_days,
-        "medical_name": medical_name,
-        "medical_note": medical_note,
-        "dose": dose
+        "name": medical_name,
+        "dose": dose,
+        "time": medical_time,
+        "note": medical_note,
+        "durationOfDays": medical_duration_days,
+        "createdAt": datetime.datetime.now().isoformat()
     }
 
+    if list_id:
+        list_med_ref = db.reference(f"users/{uid}/patient_lists/{list_id}/medications")
+        list_med_ref.push(medication_data)
     med_ref = db.reference(f"users/{uid}/medical_info/{medical_name}")
     med_ref.set(medication_data)
 
@@ -410,8 +436,8 @@ def medical_management():
         local_time = datetime.datetime.strptime(medical_time, "%H:%M").time()
         utc_plus_7 = datetime.timezone(datetime.timedelta(hours=7))
         today_local = datetime.datetime.now(utc_plus_7).date()
-        local_datetime = datetime.datetime.combine(today_local, local_time).astimezone(utc_plus_7)
-        utc_time = local_datetime.astimezone(datetime.timezone.utc)  # Convert to UTC
+        local_datetime = datetime.datetime.combine(today_local, local_time).replace(tzinfo=utc_plus_7)  # Combine date and time, set to UTC+7
+        
     except ValueError:
         return error_response("INVALID_TIME", "Time must be in HH:MM format", 400)
 
@@ -419,16 +445,17 @@ def medical_management():
         api = GoogleCalendarAPI()
         service = api.authenticate_google_calendar()
         event = {
-            'summary': "Take {name}",
+            'summary': f"Medication Reminder: {medical_name}",
             'start': {
-                'dateTime': utc_time.isoformat(),
-                'timeZone': 'UTC'
+                'dateTime': local_datetime.isoformat(),
+                'timeZone': 'Asia/Ho_Chi_Minh'
             },
             'end': {
-                'dateTime': (utc_time + datetime.timedelta(minutes=15)).isoformat(),
-                'timeZone': 'UTC'
+                'dateTime': (local_datetime + datetime.timedelta(minutes=15)).isoformat(),
+                'timeZone': 'Asia/Ho_Chi_Minh'
             },
-            'recurrence': [f'RRULE:FREQ=DAILY;COUNT={medical_duration_days}']
+            'recurrence': [f'RRULE:FREQ=DAILY;COUNT={medical_duration_days}'],
+            'attendees': [{'email': email}],
         }
         created_event = service.events().insert(calendarId='primary', body=event).execute()
 
@@ -436,7 +463,7 @@ def medical_management():
         instances = service.events().instances(
             calendarId='primary',
             eventId=created_event['id'],
-            timeMin=utc_time.isoformat(),
+            timeMin=local_datetime.isoformat(),
             maxResults=medical_duration_days
         ).execute().get('items', [])
 
@@ -445,6 +472,8 @@ def medical_management():
             instance_time_utc = datetime.datetime.fromisoformat(instance['start']['dateTime'])
             updates[instance['id']] = {
                 "googleEventInstanceId": instance['id'],
+                "masterEventId": created_event['id'],
+                "name": medical_name,
                 "scheduledStartTime": instance_time_utc.isoformat(timespec='seconds').replace('+00:00', 'Z'),
                 "isTaken": False,
                 "takenAt": None
@@ -478,34 +507,231 @@ def mark_pill_taken():
         utc_plus_7 = datetime.timezone(datetime.timedelta(hours=7))
         current_time = utc_now.astimezone(utc_plus_7)  
 
-        # Just mathcing ~ 30 mins.
         pill_logs_ref = db.reference(f"users/{uid}/pill_logs")
         all_logs = pill_logs_ref.get() or {}
-        
-        for instance_id, log in all_logs.items():
-            if log.get("isTaken"):
-                continue
 
+        for instance_id, log in all_logs.items():
             scheduled_utc = datetime.datetime.fromisoformat(log["scheduledStartTime"].replace('Z', '+00:00'))
-            scheduled_local = scheduled_utc.astimezone(utc_plus_7)  # Convert to UTC+7
-            
+            scheduled_local = scheduled_utc.astimezone(utc_plus_7)
             time_diff = abs((current_time - scheduled_local).total_seconds() / 60)
-            if time_diff <= 90: # THE CODE FOR MATCHING TIME.
-                pill_logs_ref.child(instance_id).update({
-                    "isTaken": True,
-                    "takenAt": current_time.isoformat(timespec='seconds')
-                })
-                return jsonify({
-                    "message": "Pill marked as taken",
-                    "scheduled_time": scheduled_local.strftime("%H:%M"),
-                    "taken_at": current_time.strftime("%H:%M")
-                }), 200
+            if time_diff <= 90:
+                if log.get("isTaken"):
+                    # Send email warning about double-taking
+                    user_info = db.reference(f"users/{uid}/user_info").get() or {}
+                    user_email = user_info.get("email")
+                    med_name = log.get("name", "Unknown Medication")
+                    if user_email:
+                        subject = "Warning: Duplicate Pill Intake Attempt"
+                        body = f"Hi, you have already marked your medication '{med_name}' as taken for this period. Please do not take it again."
+                        send_email(user_email, subject, body)
+                    return error_response("ALREADY_TAKEN", "Pill already marked as taken for this period.", 400)
+                else:
+                    pill_logs_ref.child(instance_id).update({
+                        "isTaken": True,
+                        "takenAt": current_time.isoformat(timespec='seconds')
+                    })
+                    return jsonify({
+                        "message": "Pill marked as taken",
+                        "scheduled_time": scheduled_local.strftime("%H:%M"),
+                        "taken_at": current_time.strftime("%H:%M")
+                    }), 200
 
         return error_response("NO_MATCH", "No active pill within ±30 minutes", 400)
 
     except Exception as e:
         return error_response("SERVER_ERROR", str(e), 500)
 
+@app.route("/get_medications")
+def get_medications():
+    uid = session.get("uid")
+    if not uid:
+        return error_response("UNAUTHORIZED", "User not logged in", 401)
+    ref = db.reference(f"users/{uid}/medical_info")
+    meds = ref.get() or {}
+    # Chuyển dict về list cho frontend dễ dùng
+    return jsonify({"medications": list(meds.values())}), 200
+
+@app.route("/user_info")
+def user_info():
+    uid = session.get("uid")
+    email = session.get("email")
+    if not uid or not email:
+        return error_response("UNAUTHORIZED", "User not logged in", 401)
+    user_ref = db.reference(f"users/{uid}/user_info")
+    user_data = user_ref.get() or {}
+
+    complete_user_data = {
+        "uid": uid,
+        "email": email,
+        "phone_number": user_data.get("phone_number", ""),
+        "username": user_data.get("username", ""),
+        "phone": user_data.get("phone_number", ""),
+    }
+    return jsonify(complete_user_data), 200
+
+@app.route("/get_patient_lists", methods=["GET"])
+def get_patient_lists():
+    uid = session.get("uid")
+    if not uid:
+        return error_response("UNAUTHORIZED", "User not logged in", 401)
+    ref = db.reference(f"users/{uid}/patient_lists")
+    lists = ref.get() or {}
+
+    # Convert Firebase dict to array, and ensure 'medications' is always a list
+    result = []
+    for list_id, list_data in lists.items():
+        # Convert medications dict to list, or empty list if not present
+        meds = list(list_data.get("medications", {}).values()) if "medications" in list_data else []
+        result.append({
+            "name": list_data.get("name", ""),
+            "condition": list_data.get("condition", ""),
+            "allergy": list_data.get("allergy", ""),  # <-- Use 'allergy' to match frontend
+            "medications": meds,
+            "list_id": list_id  # Useful for frontend to update/delete
+        })
+    return jsonify({"patient_lists": result}), 200
+
+@app.route("/me")
+def me():
+    uid = session.get("uid")
+    email = session.get("email")
+    if not uid or not email:
+        return error_response("UNAUTHORIZED", "User not logged in", 401)
+    # Fetch user info from Firebase
+    ref = db.reference(f"users/{uid}/user_info")
+    user_info = ref.get() or {}
+    user_info["email"] = email  # Ensure email is always present
+    return jsonify({"user": user_info}), 200
+
+@app.route('/news_history', methods=['GET'])
+def get_news_history():
+    uid = session.get("uid")
+    if not uid:
+        return jsonify({"error": "Unauthorized"}), 401
+    ref = db.reference(f"users/{uid}/news_history")
+    history = ref.get() or []
+    return jsonify({"history": history}), 200
+
+@app.route('/news_history/clear', methods=['POST'])
+def clear_news_history():
+    uid = session.get("uid")
+    if not uid:
+        return jsonify({"error": "Unauthorized"}), 401
+    ref = db.reference(f"users/{uid}/news_history")
+    ref.set([])
+    return jsonify({"message": "News history cleared"}), 200
+
+@app.route("/delete_patient_list", methods=["POST"])
+def delete_patient_list():
+    uid = session.get("uid")
+    email = session.get("email")
+    data = request.get_json()
+    list_id = data.get("list_id")
+    if not uid or list_id is None:
+        return error_response("MISSING_FIELDS", "User or list_id missing", 400)
+
+    # 1. Get all medications in the patient list
+    list_ref = db.reference(f"users/{uid}/patient_lists/{list_id}")
+    list_data = list_ref.get()
+    if not list_data:
+        return error_response("NOT_FOUND", "Patient list not found", 404)
+    med_names = [med.get("name") for med in list_data.get("medications", {}).values() if med.get("name")]
+
+    # 2. Get all pill logs for this user
+    pill_logs_ref = db.reference(f"users/{uid}/pill_logs")
+    pill_logs = pill_logs_ref.get() or {}
+
+    # 3. Authenticate Google Calendar
+    try:
+        api = GoogleCalendarAPI()
+        service = api.authenticate_google_calendar()
+    except Exception as e:
+        print(f"[CALENDAR AUTH ERROR] {e}")
+        return error_response("CALENDAR_AUTH_ERROR", "Failed to authenticate with Google Calendar", 500)
+
+    # 4. Delete related calendar events and pill logs
+    master_event_ids = set()
+    for log_id, log in pill_logs.items():
+        med_name = log.get("name")
+        if med_name in med_names:
+            master_event_id = log.get("masterEventId")
+            if master_event_id:
+                master_event_ids.add(master_event_id)
+            pill_logs_ref.child(log_id).delete()  # Delete all logs for these meds
+
+    for event_id in master_event_ids:
+        try:
+            service.events().delete(calendarId='primary', eventId=event_id).execute()
+            print(f"Deleted calendar event {event_id}")
+        except Exception as e:
+            print(f"Failed to delete calendar event {event_id}: {e}")
+
+    # 5. Delete the patient list itself
+    med_info_ref = db.reference(f"users/{uid}/medical_info")
+    for med_name in med_names:
+        med_info_ref.child(med_name).delete()
+    list_ref.delete()
+    return jsonify({"message": "List and related pill reminders deleted"}), 200
+
+
+@app.route("/delete_medication", methods=["POST"])
+def delete_medication():
+    uid = session.get("uid")
+    data = request.get_json()
+    list_id = data.get("list_id")
+    med_name = data.get("med_name")
+    if not uid or not list_id or not med_name:
+        return error_response("MISSING_FIELDS", "User, list_id, or med_name missing", 400)
+    meds_ref = db.reference(f"users/{uid}/patient_lists/{list_id}/medications")
+    meds = meds_ref.get() or {}
+
+    # Authenticate Google Calendar
+    try:
+        api = GoogleCalendarAPI()
+        service = api.authenticate_google_calendar()
+    except Exception as e:
+        print(f"[CALENDAR AUTH ERROR] {e}")
+        return error_response("CALENDAR_AUTH_ERROR", "Failed to authenticate with Google Calendar", 500)
+
+    # Delete related pill logs and collect master event IDs
+    pill_logs_ref = db.reference(f"users/{uid}/pill_logs")
+    pill_logs = pill_logs_ref.get() or {}
+    master_event_ids = set()
+    for log_id, log in pill_logs.items():
+        if log.get("name") == med_name:
+            master_event_id = log.get("masterEventId")
+            if master_event_id:
+                master_event_ids.add(master_event_id)
+            pill_logs_ref.child(log_id).delete()
+
+    # Delete recurring events from Google Calendar
+    for event_id in master_event_ids:
+        try:
+            service.events().delete(calendarId='primary', eventId=event_id).execute()
+            print(f"Deleted calendar event {event_id} for medication {med_name}")
+        except Exception as e:
+            print(f"Failed to delete calendar event {event_id}: {e}")
+
+    # Delete medication from patient list
+    for med_id, med in meds.items():
+        if med.get("name") == med_name:
+            meds_ref.child(med_id).delete()
+
+    # Remove from user's medical_info
+    med_info_ref = db.reference(f"users/{uid}/medical_info/{med_name}")
+    med_info_ref.delete()
+
+    return jsonify({"message": "Medication and related reminders deleted"}), 200
+
+@app.route('/logout', methods=['POST'])
+def logout():
+    session.clear()
+    return jsonify({"message": "Logged out successfully"}), 200
+
+@app.route('/check_pill', methods = ['POST'])
+def run_pill_reminders():
+    check_pill_reminders()
+    return jsonify({"message": "Pill reminders checked"}), 200
+
 if __name__ == "__main__":
-    scheduler.start()
-    app.run(debug=True)
+    app.run(debug=True, ssl_context=('cert.pem', 'key.pem'))

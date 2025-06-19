@@ -8,7 +8,7 @@ from googleapiclient.errors import HttpError
 
 # Permission to create and manage calendar events
 SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
-DEFAULT_TIMEZONE = "Asia/Bangkok"
+DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh"
 EVENT_DURATION_MINUTES = 15
 
 class GoogleCalendarAPI:
