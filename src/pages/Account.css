@@ -1,0 +1,54 @@
+.account-container {
+  max-width: 800px;
+  margin: 40px auto;
+  padding: 20px;
+  background: #f9f9f9;
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+.account-info {
+  background: #fff;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+  margin-bottom: 30px;
+}
+
+.account-info p {
+  margin: 10px 0;
+  font-size: 16px;
+}
+
+.account-section {
+  margin-bottom: 30px;
+}
+
+.account-section h3 {
+  margin-bottom: 15px;
+  color: #007bff;
+}
+
+.account-list-card {
+  background: #fff;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.account-list-card h4 {
+  margin-bottom: 10px;
+  color: #333;
+}
+
+.account-list-card ul {
+  list-style-type: disc;
+  padding-left: 20px;
+}
+
+.account-list-card li {
+  margin-bottom: 8px;
+  font-size: 15px;
+  color: #444;
+}

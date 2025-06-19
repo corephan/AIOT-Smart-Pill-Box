@@ -1,17 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import './Navbar.css';
+import { useAuth } from '../contexts/AuthContext';
 
 function Navbar() {
+    const { isAuthenticated, user, logout } = useAuth();
     const navigate = useNavigate();
-    const [user, setUser] = useState(null);
     const [showDropdown, setShowDropdown] = useState(false);
     const dropdownRef = useRef();
 
+    // Đóng dropdown khi click ra ngoài
     useEffect(() => {
-        const savedUser = localStorage.getItem('user');
-        if (savedUser) setUser(JSON.parse(savedUser));
-
         const handleClickOutside = (e) => {
             if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
                 setShowDropdown(false);
@@ -21,15 +20,15 @@ function Navbar() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const handleLogout = () => {
-        localStorage.removeItem('user');
-        setUser(null);
+    // Xử lý đăng xuất
+    const handleLogout = async () => {
+        await logout();
         navigate('/');
     };
 
-    const handleSwitchAccount = () => {
-        localStorage.removeItem('user');
-        setUser(null);
+    // Xử lý chuyển tài khoản
+    const handleSwitchAccount = async () => {
+        await logout();
         navigate('/login');
     };
 
@@ -42,20 +41,26 @@ function Navbar() {
                 <Link to="/service">Dịch vụ</Link>
             </div>
             <div className="navbar-auth">
-                {!user ? (
+                {!isAuthenticated || !user ? (
                     <>
                         <Link to="/login" className="btn">Đăng nhập</Link>
                         <Link to="/register" className="btn">Đăng ký</Link>
                     </>
                 ) : (
-                    <div className="user-menu" ref={dropdownRef}>
-                        <span className="user-name" onClick={() => setShowDropdown(!showDropdown)}>
+                    <div
+                        className="user-menu"
+                        ref={dropdownRef}
+                        onMouseEnter={() => setShowDropdown(true)}
+                        onMouseLeave={() => setShowDropdown(false)}
+                    >
+                        <span className="user-name">
                             👤 {user.username}
                         </span>
                         {showDropdown && (
                             <div className="dropdown-menu">
                                 <p><strong>Email:</strong> {user.email}</p>
                                 <p><strong>Điện thoại:</strong> {user.phone}</p>
+                                <button onClick={() => navigate('/account')}>👁️ Tài khoản</button>
                                 <button onClick={handleSwitchAccount}>🔁 Chuyển tài khoản</button>
                                 <button onClick={handleLogout} className="logout">🚪 Đăng xuất</button>
                             </div>
