@@ -29,12 +29,6 @@ function Account() {
       .then(data => setUserData(data.patient_lists || []))
       .catch(() => setUserData([]));
 
-    // Fetch news history from backend (replace with your API if available)
-    fetch(`${API_BASE}/news_history`, { credentials: 'include' })
-      .then(res => res.ok ? res.json() : Promise.reject())
-      .then(data => setNewsHistory((data.history || []).slice(-10).reverse()))
-      .catch(() => setNewsHistory([]));
-  }, [navigate]);
 
   const handleClearNews = () => {
     // Clear news history via backend (replace with your API if available)
@@ -76,30 +70,5 @@ function Account() {
           ))
         )}
       </div>
-
-      <div className="account-section">
-        <h3>📰 Tin tức đã xem</h3>
-        <div className="news-history">
-          {newsHistory.length === 0 ? (
-            <p>Bạn chưa xem bài báo nào.</p>
-          ) : (
-            <>
-              <ul>
-                {newsHistory.map((news, index) => (
-                  <li key={index}>
-                    <a href={news.link} target="_blank" rel="noopener noreferrer">{news.title}</a>
-                  </li>
-                ))}
-              </ul>
-              <button onClick={handleClearNews} style={{ marginTop: '10px', padding: '6px 12px', background: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-                🗑️ Xoá toàn bộ lịch sử
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default Account;
