@@ -23,8 +23,8 @@ function Home() {
                     <p className="text-gray-600">Hỗ trợ theo dõi lịch thuốc cho người thân lớn tuổi.</p>
                 </div>
                 <div className="feature-card bg-white rounded-lg shadow p-6">
-                    <h3 className="text-xl font-semibold text-blue-600 mb-2">📲 Kết nối Zalo OA</h3>
-                    <p className="text-gray-600">Nhận thông báo uống thuốc qua Zalo tiện lợi.</p>
+                    <h3 className="text-xl font-semibold text-blue-600 mb-2">📲 Kết nối email</h3>
+                    <p className="text-gray-600">Nhận thông báo uống thuốc qua email tiện lợi.</p>
                 </div>
             </div>
 
